@@ -866,6 +866,14 @@
             }
 
             generateDemoResponse(modelId, message) {
+                // Extracts unique words from your message
+                const words = message.split(' ').filter(word => word.length > 3);
+                const uniqueWords = [...new Set(words)];
+
+                // Uses timestamp for randomization
+                const timestamp = Date.now();
+                const randomFactor = timestamp % 100;
+
                 const lowerMessage = message.toLowerCase();
                 const topic = this.extractTopic(lowerMessage);
                 
