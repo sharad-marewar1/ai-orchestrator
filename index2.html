@@ -802,11 +802,12 @@
                 };
 
                 let requestBody;
+                let endpoint = model.endpoint;
                 
                 switch (modelId) {
                     case 'gpt4':
                         requestBody = {
-                            model: model.model,
+                            model: 'gpt-4-turbo-preview',
                             messages: [{ role: 'user', content: message }],
                             max_tokens: 1000,
                             temperature: 0.7
@@ -815,7 +816,7 @@
                         
                     case 'claude':
                         requestBody = {
-                            model: model.model,
+                            model: 'claude-3-sonnet-20240229',
                             max_tokens: 1000,
                             messages: [{ role: 'user', content: message }]
                         };
@@ -834,74 +835,284 @@
                         };
                         break;
                         
+                    case 'mistral':
+                        requestBody = {
+                            model: 'mistral-large-latest',
+                            messages: [{ role: 'user', content: message }],
+                            max_tokens: 1000,
+                            temperature: 0.7
+                        };
+                        break;
+                        
                     default:
                         throw new Error(`Unsupported model: ${modelId}`);
                 }
 
-                const response = await fetch(model.endpoint, {
-                    method: 'POST',
-                    headers,
-                    body: JSON.stringify(requestBody)
-                });
+                try {
+                    const response = await fetch(endpoint, {
+                        method: 'POST',
+                        headers,
+                        body: JSON.stringify(requestBody)
+                    });
 
-                if (!response.ok) {
-                    throw new Error(`API request failed: ${response.status} ${response.statusText}`);
+                    if (!response.ok) {
+                        const errorText = await response.text();
+                        throw new Error(`API request failed: ${response.status} ${response.statusText} - ${errorText}`);
+                    }
+
+                    const data = await response.json();
+                    return this.extractResponseText(data, modelId);
+                } catch (error) {
+                    console.error(`API request failed for ${modelId}:`, error);
+                    throw new Error(`Failed to get response from ${model.name}: ${error.message}`);
                 }
-
-                const data = await response.json();
-                return this.extractResponseText(data, modelId);
             }
 
             extractResponseText(data, modelId) {
-                switch (modelId) {
-                    case 'gpt4':
-                        return data.choices?.[0]?.message?.content || 'No response generated';
-                    case 'claude':
-                        return data.content?.[0]?.text || 'No response generated';
-                    case 'gemini':
-                        return data.candidates?.[0]?.content?.parts?.[0]?.text || 'No response generated';
-                    default:
-                        return 'Response format not supported';
+                try {
+                    switch (modelId) {
+                        case 'gpt4':
+                            return data.choices?.[0]?.message?.content || 'No response generated';
+                        case 'claude':
+                            return data.content?.[0]?.text || 'No response generated';
+                        case 'gemini':
+                            return data.candidates?.[0]?.content?.parts?.[0]?.text || 'No response generated';
+                        case 'mistral':
+                            return data.choices?.[0]?.message?.content || 'No response generated';
+                        default:
+                            return 'Response format not supported';
+                    }
+                } catch (error) {
+                    console.error('Error extracting response:', error);
+                    return 'Error processing response';
                 }
             }
 
             generateDemoResponse(modelId, message) {
-                // Extracts unique words from your message
-                const words = message.split(' ').filter(word => word.length > 3);
-                const uniqueWords = [...new Set(words)];
-
-                // Uses timestamp for randomization
-                const timestamp = Date.now();
-                const randomFactor = timestamp % 100;
-
                 const lowerMessage = message.toLowerCase();
                 const topic = this.extractTopic(lowerMessage);
+                const model = this.aiModels[modelId];
                 
-                const responses = {
-                    gpt4: {
-                        marketing: "Based on comprehensive market analysis, here's a strategic approach:\n\n1. **Target Audience Segmentation**: Identify primary and secondary markets\n2. **Competitive Analysis**: Research direct and indirect competitors\n3. **Value Proposition**: Develop unique selling points\n4. **Channel Strategy**: Multi-channel approach (digital + traditional)\n5. **Budget Allocation**: 40% digital ads, 30% content, 20% events, 10% partnerships\n6. **Success Metrics**: KPIs for each channel with monthly reviews",
-                        technical: "Technical implementation strategy:\n\n1. **Architecture**: Microservices for scalability\n2. **Technology Stack**: Modern, cloud-native solutions\n3. **Security**: Multi-layer security approach\n4. **Performance**: Optimization and monitoring\n5. **Deployment**: CI/CD pipeline with automated testing",
-                        creative: "Creative direction and content strategy:\n\n1. **Brand Identity**: Cohesive visual and messaging\n2. **Content Calendar**: Strategic content planning\n3. **Storytelling**: Narrative-driven approach\n4. **Visual Design**: Modern, accessible design principles\n5. **Engagement**: Interactive and community-focused elements"
-                    },
-                    claude: {
-                        marketing: "From an analytical perspective, consider this framework:\n\n**Market Research Phase**:\n- Customer interviews and surveys\n- Competitor analysis matrix\n- Market gap identification\n\n**Strategy Development**:\n- Positioning statement refinement\n- Channel effectiveness analysis\n- Budget optimization model\n\n**Implementation Plan**:\n- Timeline with milestones\n- Resource allocation\n- Risk mitigation strategies",
-                        technical: "System architecture considerations:\n\n**Scalability**: Horizontal scaling with load balancing\n**Reliability**: Fault tolerance and redundancy\n**Maintainability**: Clean code and documentation\n**Security**: OWASP compliance and regular audits\n**Performance**: Caching and optimization strategies",
-                        creative: "Creative strategy framework:\n\n**Brand Positioning**:\n- Core values and personality\n- Target audience personas\n- Competitive differentiation\n\n**Content Strategy**:\n- Educational and entertaining content\n- User-generated content campaigns\n- Influencer partnerships\n\n**Visual Identity**:\n- Consistent design system\n- Accessibility compliance\n- Cross-platform adaptation"
-                    },
-                    gemini: {
-                        marketing: "Multimodal marketing approach:\n\n**Digital Presence**:\n- Website optimization and SEO\n- Social media strategy across platforms\n- Email marketing automation\n\n**Content Marketing**:\n- Blog and thought leadership\n- Video content and webinars\n- Podcast and audio content\n\n**Data-Driven Decisions**:\n- Analytics and tracking setup\n- A/B testing framework\n- Customer journey mapping",
-                        technical: "Modern development approach:\n\n**Agile Methodology**:\n- Sprint planning and retrospectives\n- Continuous integration\n- Automated testing\n\n**Cloud Infrastructure**:\n- Multi-cloud strategy\n- Container orchestration\n- Serverless functions\n\n**Quality Assurance**:\n- Code review process\n- Performance monitoring\n- Security scanning"
-                    },
-                    mistral: {
-                        marketing: "Efficient marketing strategy:\n\n**Quick Wins**:\n- Social media optimization\n- Local SEO and directories\n- Referral programs\n\n**Sustainable Growth**:\n- Content marketing funnel\n- Email list building\n- Community engagement\n\n**Measurement**:\n- ROI tracking for each channel\n- Customer lifetime value\n- Conversion optimization",
-                        technical: "Lean technical approach:\n\n**MVP Development**:\n- Core features first\n- User feedback integration\n- Iterative improvements\n\n**Cost Optimization**:\n- Cloud cost management\n- Open-source solutions\n- Efficient resource usage\n\n**Quality Focus**:\n- Automated testing\n- Code quality metrics\n- Security best practices"
-                    }
-                };
+                // Generate truly dynamic response based on message content
+                const dynamicResponse = this.generateDynamicResponse(modelId, message, lowerMessage, topic);
+                
+                return `${model.name} Analysis (Demo Mode):\n\n${dynamicResponse}`;
+            }
 
-                const modelResponses = responses[modelId] || responses.gpt4;
-                const response = modelResponses[topic] || modelResponses.marketing;
+            generateDynamicResponse(modelId, message, lowerMessage, topic) {
+                // Extract key words from the message
+                const words = message.split(' ').filter(word => word.length > 3);
+                const uniqueWords = [...new Set(words)];
                 
-                return `${this.aiModels[modelId].name} Analysis (Demo Mode):\n\n${response}`;
+                // Generate response based on model personality and message content
+                switch(modelId) {
+                    case 'gpt4':
+                        return this.generateGPT4Response(message, lowerMessage, topic, uniqueWords);
+                    case 'claude':
+                        return this.generateClaudeResponse(message, lowerMessage, topic, uniqueWords);
+                    case 'gemini':
+                        return this.generateGeminiResponse(message, lowerMessage, topic, uniqueWords);
+                    case 'mistral':
+                        return this.generateMistralResponse(message, lowerMessage, topic, uniqueWords);
+                    default:
+                        return this.generateGPT4Response(message, lowerMessage, topic, uniqueWords);
+                }
+            }
+
+            generateGPT4Response(message, lowerMessage, topic, uniqueWords) {
+                const timestamp = Date.now();
+                const randomFactor = timestamp % 100;
+                
+                if (lowerMessage.includes('marketing') || lowerMessage.includes('strategy') || lowerMessage.includes('business')) {
+                    const strategies = [
+                        `Based on your request about "${message}", here's a comprehensive marketing strategy:\n\n1. **Market Analysis**: Deep dive into target demographics and competitor landscape\n2. **Brand Positioning**: Develop unique value proposition based on "${uniqueWords.slice(0, 3).join(', ')}"\n3. **Channel Strategy**: Multi-platform approach with 40% digital, 30% content, 20% partnerships, 10% events\n4. **Success Metrics**: Track KPIs including conversion rates and customer lifetime value\n5. **Implementation Timeline**: 90-day rollout with monthly reviews`,
+                        
+                        `Strategic marketing approach for "${message}":\n\n**Phase 1: Research & Analysis**\n- Customer persona development\n- Competitive intelligence gathering\n- Market opportunity identification\n\n**Phase 2: Strategy Development**\n- Positioning statement creation\n- Channel mix optimization\n- Budget allocation strategy\n\n**Phase 3: Execution**\n- Campaign development and testing\n- Performance monitoring\n- Optimization based on data`,
+                        
+                        `Marketing strategy framework for your needs:\n\n**Target Audience**: ${uniqueWords.length > 0 ? uniqueWords[0] : 'Primary'} market focus\n**Value Proposition**: Differentiated approach based on market gaps\n**Distribution Channels**: Omnichannel presence with digital-first strategy\n**Budget Allocation**: Data-driven spending with ROI tracking\n**Success Metrics**: Conversion optimization and brand awareness`
+                    ];
+                    return strategies[randomFactor % strategies.length];
+                }
+                
+                if (lowerMessage.includes('technical') || lowerMessage.includes('development') || lowerMessage.includes('code')) {
+                    const techStrategies = [
+                        `Technical implementation for "${message}":\n\n1. **Architecture Design**: Microservices with API-first approach\n2. **Technology Stack**: Modern cloud-native solutions (React, Node.js, AWS)\n3. **Security Framework**: OWASP compliance with regular security audits\n4. **Performance Optimization**: Caching strategies and CDN implementation\n5. **Deployment Pipeline**: CI/CD with automated testing and monitoring`,
+                        
+                        `Development strategy for your project:\n\n**System Architecture**:\n- Scalable microservices design\n- Load balancing and auto-scaling\n- Database optimization and caching\n\n**Development Process**:\n- Agile methodology with 2-week sprints\n- Code review and pair programming\n- Automated testing and deployment\n\n**Quality Assurance**:\n- Unit and integration testing\n- Performance monitoring\n- Security scanning and compliance`,
+                        
+                        `Technical approach for "${message}":\n\n**Infrastructure**: Cloud-native with containerization\n**Frontend**: Modern JavaScript framework with responsive design\n**Backend**: RESTful APIs with GraphQL support\n**Database**: Scalable NoSQL solution with caching\n**DevOps**: Automated deployment with monitoring and alerting`
+                    ];
+                    return techStrategies[randomFactor % techStrategies.length];
+                }
+                
+                if (lowerMessage.includes('creative') || lowerMessage.includes('design') || lowerMessage.includes('content')) {
+                    const creativeStrategies = [
+                        `Creative strategy for "${message}":\n\n1. **Brand Identity**: Cohesive visual language and messaging framework\n2. **Content Strategy**: Multi-format content with storytelling approach\n3. **Design System**: Consistent UI/UX patterns and accessibility standards\n4. **Engagement Strategy**: Interactive elements and community building\n5. **Performance Tracking**: Creative metrics and user engagement analysis`,
+                        
+                        `Creative direction framework:\n\n**Brand Development**:\n- Visual identity and brand guidelines\n- Tone of voice and messaging strategy\n- Target audience persona development\n\n**Content Creation**:\n- Editorial calendar and content themes\n- Multi-platform content adaptation\n- User-generated content campaigns\n\n**Design Implementation**:\n- Responsive design principles\n- Accessibility compliance\n- Cross-platform consistency`,
+                        
+                        `Creative approach for "${message}":\n\n**Visual Design**: Modern, clean aesthetic with brand consistency\n**Content Strategy**: Educational and entertaining content mix\n**User Experience**: Intuitive navigation and engagement features\n**Brand Positioning**: Unique market differentiation\n**Community Building**: Interactive features and social engagement`
+                    ];
+                    return creativeStrategies[randomFactor % creativeStrategies.length];
+                }
+                
+                // Generic response for other topics
+                const genericResponses = [
+                    `Comprehensive analysis of "${message}":\n\n1. **Problem Identification**: Key challenges and opportunities\n2. **Strategic Framework**: Systematic approach to solution development\n3. **Implementation Plan**: Step-by-step execution strategy\n4. **Success Metrics**: Measurable outcomes and KPIs\n5. **Risk Management**: Contingency planning and mitigation strategies`,
+                    
+                    `Strategic approach for "${message}":\n\n**Analysis Phase**:\n- Market research and competitive analysis\n- Stakeholder identification and requirements gathering\n- Risk assessment and opportunity evaluation\n\n**Strategy Development**:\n- Goal setting and objective definition\n- Resource allocation and timeline planning\n- Performance measurement framework\n\n**Execution Plan**:\n- Implementation roadmap with milestones\n- Team structure and responsibility matrix\n- Communication and change management strategy`,
+                    
+                    `Framework for addressing "${message}":\n\n**Research & Analysis**: Data-driven insights and market understanding\n**Strategy Formulation**: Evidence-based approach with clear objectives\n**Implementation**: Structured execution with quality assurance\n**Monitoring**: Continuous evaluation and optimization\n**Success Measurement**: ROI tracking and performance analytics`
+                ];
+                
+                return genericResponses[randomFactor % genericResponses.length];
+            }
+
+            generateClaudeResponse(message, lowerMessage, topic, uniqueWords) {
+                const timestamp = Date.now();
+                const randomFactor = timestamp % 100;
+                
+                if (lowerMessage.includes('marketing') || lowerMessage.includes('strategy') || lowerMessage.includes('business')) {
+                    const strategies = [
+                        `From an analytical perspective on "${message}":\n\n**Market Research Phase**:\n- Customer interviews and survey methodology\n- Competitor analysis matrix with SWOT framework\n- Market gap identification and opportunity assessment\n\n**Strategy Development**:\n- Positioning statement refinement and testing\n- Channel effectiveness analysis with ROI modeling\n- Budget optimization using data-driven allocation\n\n**Implementation Plan**:\n- Timeline with critical path milestones\n- Resource allocation and capacity planning\n- Risk mitigation strategies and contingency plans`,
+                        
+                        `Analytical framework for "${message}":\n\n**Research Methodology**:\n- Quantitative and qualitative data collection\n- Statistical analysis and trend identification\n- Predictive modeling and scenario planning\n\n**Strategic Planning**:\n- Evidence-based decision making\n- Performance benchmarking and best practices\n- Continuous improvement and optimization\n\n**Execution Strategy**:\n- Phased rollout with pilot testing\n- Stakeholder engagement and change management\n- Performance monitoring and feedback loops`,
+                        
+                        `Strategic analysis for "${message}":\n\n**Data-Driven Approach**:\n- Market research and customer insights\n- Competitive intelligence and benchmarking\n- Performance analytics and optimization\n\n**Strategic Framework**:\n- Goal alignment and objective setting\n- Resource planning and allocation\n- Risk assessment and mitigation\n\n**Implementation Excellence**:\n- Process optimization and efficiency\n- Quality assurance and continuous improvement\n- Success measurement and reporting`
+                    ];
+                    return strategies[randomFactor % strategies.length];
+                }
+                
+                if (lowerMessage.includes('technical') || lowerMessage.includes('development') || lowerMessage.includes('code')) {
+                    const techStrategies = [
+                        `System architecture considerations for "${message}":\n\n**Scalability**: Horizontal scaling with load balancing and auto-scaling\n**Reliability**: Fault tolerance with redundancy and failover mechanisms\n**Maintainability**: Clean code architecture with comprehensive documentation\n**Security**: OWASP compliance with regular security audits and penetration testing\n**Performance**: Caching strategies with CDN and database optimization`,
+                        
+                        `Technical architecture for "${message}":\n\n**System Design**:\n- Microservices architecture with API gateway\n- Event-driven architecture for scalability\n- Database design with optimization strategies\n\n**Development Standards**:\n- Code quality and review processes\n- Testing strategies and automation\n- Documentation and knowledge management\n\n**Operational Excellence**:\n- Monitoring and alerting systems\n- Incident response and disaster recovery\n- Performance optimization and tuning`,
+                        
+                        `Engineering approach for "${message}":\n\n**Architecture Principles**:\n- Scalable and maintainable design\n- Security-first development practices\n- Performance optimization and monitoring\n\n**Development Process**:\n- Agile methodology with continuous integration\n- Code review and quality assurance\n- Automated testing and deployment\n\n**Operational Excellence**:\n- Monitoring and observability\n- Incident management and response\n- Continuous improvement and optimization`
+                    ];
+                    return techStrategies[randomFactor % techStrategies.length];
+                }
+                
+                if (lowerMessage.includes('creative') || lowerMessage.includes('design') || lowerMessage.includes('content')) {
+                    const creativeStrategies = [
+                        `Creative strategy framework for "${message}":\n\n**Brand Positioning**:\n- Core values and personality development\n- Target audience persona creation\n- Competitive differentiation strategy\n\n**Content Strategy**:\n- Educational and entertaining content balance\n- User-generated content campaigns and engagement\n- Influencer partnerships and collaboration\n\n**Visual Identity**:\n- Consistent design system and guidelines\n- Accessibility compliance and inclusive design\n- Cross-platform adaptation and optimization`,
+                        
+                        `Creative direction for "${message}":\n\n**Brand Development**:\n- Visual identity and brand guidelines\n- Tone of voice and messaging strategy\n- Target audience understanding and engagement\n\n**Content Creation**:\n- Editorial calendar and content themes\n- Multi-platform content adaptation\n- Community building and user engagement\n\n**Design Implementation**:\n- Responsive design principles\n- Accessibility and usability standards\n- Cross-platform consistency and optimization`,
+                        
+                        `Creative approach for "${message}":\n\n**Brand Strategy**:\n- Visual identity and brand positioning\n- Target audience and market research\n- Competitive analysis and differentiation\n\n**Content Development**:\n- Editorial strategy and content planning\n- Multi-format content creation\n- Community engagement and user interaction\n\n**Design Excellence**:\n- User experience and interface design\n- Accessibility and inclusive design\n- Cross-platform consistency and optimization`
+                    ];
+                    return creativeStrategies[randomFactor % creativeStrategies.length];
+                }
+                
+                // Generic analytical response
+                const genericResponses = [
+                    `Analytical framework for "${message}":\n\n**Research & Analysis**:\n- Data collection and analysis methodology\n- Market research and competitive intelligence\n- Stakeholder analysis and requirements gathering\n\n**Strategic Planning**:\n- Goal setting and objective definition\n- Resource allocation and capacity planning\n- Risk assessment and mitigation strategies\n\n**Implementation Excellence**:\n- Process optimization and efficiency\n- Quality assurance and continuous improvement\n- Performance measurement and reporting`,
+                    
+                    `Strategic analysis for "${message}":\n\n**Comprehensive Research**:\n- Market analysis and trend identification\n- Competitive benchmarking and best practices\n- Customer insights and behavior analysis\n\n**Strategic Framework**:\n- Evidence-based decision making\n- Performance optimization and efficiency\n- Continuous improvement and innovation\n\n**Execution Excellence**:\n- Phased implementation with pilot testing\n- Stakeholder engagement and change management\n- Success measurement and ROI tracking`,
+                    
+                    `Analytical approach for "${message}":\n\n**Data-Driven Insights**:\n- Market research and competitive analysis\n- Customer behavior and preference analysis\n- Performance benchmarking and optimization\n\n**Strategic Planning**:\n- Goal alignment and objective setting\n- Resource planning and allocation\n- Risk assessment and mitigation\n\n**Implementation Strategy**:\n- Process optimization and efficiency\n- Quality assurance and continuous improvement\n- Success measurement and reporting`
+                ];
+                
+                return genericResponses[randomFactor % genericResponses.length];
+            }
+
+            generateGeminiResponse(message, lowerMessage, topic, uniqueWords) {
+                const timestamp = Date.now();
+                const randomFactor = timestamp % 100;
+                
+                if (lowerMessage.includes('marketing') || lowerMessage.includes('strategy') || lowerMessage.includes('business')) {
+                    const strategies = [
+                        `Multimodal marketing approach for "${message}":\n\n**Digital Presence**:\n- Website optimization with SEO and performance\n- Social media strategy across multiple platforms\n- Email marketing automation and personalization\n\n**Content Marketing**:\n- Blog and thought leadership content\n- Video content and webinar strategy\n- Podcast and audio content development\n\n**Data-Driven Decisions**:\n- Analytics and tracking setup\n- A/B testing framework and optimization\n- Customer journey mapping and touchpoint optimization`,
+                        
+                        `Digital-first strategy for "${message}":\n\n**Online Presence**:\n- Website design and user experience\n- Social media engagement and community building\n- Email marketing and automation\n\n**Content Strategy**:\n- Educational and entertaining content mix\n- Video and multimedia content creation\n- Influencer partnerships and collaborations\n\n**Performance Optimization**:\n- Analytics and data tracking\n- Conversion optimization and testing\n- Customer experience and journey mapping`,
+                        
+                        `Modern marketing approach for "${message}":\n\n**Digital Strategy**:\n- Website optimization and SEO\n- Social media presence and engagement\n- Email marketing and automation\n\n**Content Development**:\n- Blog and educational content\n- Video and multimedia creation\n- Influencer and partnership strategy\n\n**Data Analytics**:\n- Performance tracking and measurement\n- A/B testing and optimization\n- Customer journey and experience mapping`
+                    ];
+                    return strategies[randomFactor % strategies.length];
+                }
+                
+                if (lowerMessage.includes('technical') || lowerMessage.includes('development') || lowerMessage.includes('code')) {
+                    const techStrategies = [
+                        `Modern development approach for "${message}":\n\n**Agile Methodology**:\n- Sprint planning and retrospectives\n- Continuous integration and deployment\n- Automated testing and quality assurance\n\n**Cloud Infrastructure**:\n- Multi-cloud strategy and optimization\n- Container orchestration and management\n- Serverless functions and microservices\n\n**Quality Assurance**:\n- Code review process and standards\n- Performance monitoring and optimization\n- Security scanning and compliance`,
+                        
+                        `Contemporary development for "${message}":\n\n**Development Process**:\n- Agile methodology with continuous delivery\n- Code review and quality assurance\n- Automated testing and deployment\n\n**Infrastructure**:\n- Cloud-native architecture and design\n- Containerization and orchestration\n- Serverless and microservices approach\n\n**Quality Excellence**:\n- Performance monitoring and optimization\n- Security scanning and compliance\n- Continuous improvement and innovation`,
+                        
+                        `Modern engineering for "${message}":\n\n**Development Excellence**:\n- Agile methodology and continuous delivery\n- Code review and quality assurance\n- Automated testing and deployment\n\n**Infrastructure Strategy**:\n- Cloud-native architecture and design\n- Containerization and orchestration\n- Serverless and microservices approach\n\n**Quality Assurance**:\n- Performance monitoring and optimization\n- Security scanning and compliance\n- Continuous improvement and innovation`
+                    ];
+                    return techStrategies[randomFactor % techStrategies.length];
+                }
+                
+                if (lowerMessage.includes('creative') || lowerMessage.includes('design') || lowerMessage.includes('content')) {
+                    const creativeStrategies = [
+                        `Creative digital strategy for "${message}":\n\n**Visual Design**:\n- Modern, clean aesthetic with brand consistency\n- Responsive design and mobile optimization\n- Accessibility compliance and inclusive design\n\n**Content Strategy**:\n- Educational and entertaining content mix\n- Video and multimedia content creation\n- User-generated content and community engagement\n\n**User Experience**:\n- Intuitive navigation and interaction design\n- Cross-platform consistency and optimization\n- Performance and loading speed optimization`,
+                        
+                        `Digital creative approach for "${message}":\n\n**Design Excellence**:\n- Modern visual design and branding\n- Responsive and accessible design\n- Cross-platform consistency and optimization\n\n**Content Development**:\n- Educational and entertaining content\n- Video and multimedia creation\n- Community engagement and user interaction\n\n**User Experience**:\n- Intuitive navigation and interaction\n- Performance optimization and speed\n- Accessibility and inclusive design`,
+                        
+                        `Creative digital strategy for "${message}":\n\n**Visual Design**:\n- Modern aesthetic with brand consistency\n- Responsive design and mobile optimization\n- Accessibility and inclusive design\n\n**Content Strategy**:\n- Educational and entertaining content\n- Video and multimedia creation\n- Community engagement and interaction\n\n**User Experience**:\n- Intuitive navigation and design\n- Cross-platform consistency\n- Performance and accessibility optimization`
+                    ];
+                    return creativeStrategies[randomFactor % creativeStrategies.length];
+                }
+                
+                // Generic digital response
+                const genericResponses = [
+                    `Digital-first approach for "${message}":\n\n**Online Strategy**:\n- Website optimization and user experience\n- Social media presence and engagement\n- Email marketing and automation\n\n**Content Development**:\n- Educational and entertaining content\n- Video and multimedia creation\n- Community building and engagement\n\n**Performance Optimization**:\n- Analytics and data tracking\n- A/B testing and conversion optimization\n- Customer journey and experience mapping`,
+                    
+                    `Modern digital strategy for "${message}":\n\n**Digital Presence**:\n- Website design and optimization\n- Social media strategy and engagement\n- Email marketing and automation\n\n**Content Strategy**:\n- Educational and entertaining content\n- Video and multimedia creation\n- Community engagement and interaction\n\n**Performance Excellence**:\n- Analytics and measurement\n- Conversion optimization and testing\n- Customer experience and journey mapping`,
+                    
+                    `Contemporary digital approach for "${message}":\n\n**Online Strategy**:\n- Website optimization and user experience\n- Social media presence and engagement\n- Email marketing and automation\n\n**Content Development**:\n- Educational and entertaining content\n- Video and multimedia creation\n- Community building and engagement\n\n**Performance Optimization**:\n- Analytics and data tracking\n- A/B testing and conversion optimization\n- Customer journey and experience mapping`
+                ];
+                
+                return genericResponses[randomFactor % genericResponses.length];
+            }
+
+            generateMistralResponse(message, lowerMessage, topic, uniqueWords) {
+                const timestamp = Date.now();
+                const randomFactor = timestamp % 100;
+                
+                if (lowerMessage.includes('marketing') || lowerMessage.includes('strategy') || lowerMessage.includes('business')) {
+                    const strategies = [
+                        `Efficient marketing strategy for "${message}":\n\n**Quick Wins**:\n- Social media optimization and engagement\n- Local SEO and directory listings\n- Referral programs and partnerships\n\n**Sustainable Growth**:\n- Content marketing funnel development\n- Email list building and nurturing\n- Community engagement and loyalty\n\n**Measurement**:\n- ROI tracking for each channel\n- Customer lifetime value optimization\n- Conversion rate optimization and testing`,
+                        
+                        `Lean marketing approach for "${message}":\n\n**Immediate Impact**:\n- Social media optimization and engagement\n- Local SEO and directory presence\n- Referral and partnership programs\n\n**Long-term Strategy**:\n- Content marketing and lead generation\n- Email list building and automation\n- Community building and engagement\n\n**Performance Tracking**:\n- ROI measurement and optimization\n- Customer lifetime value analysis\n- Conversion optimization and testing`,
+                        
+                        `Efficient marketing for "${message}":\n\n**Quick Results**:\n- Social media optimization and engagement\n- Local SEO and directory presence\n- Referral and partnership programs\n\n**Sustainable Growth**:\n- Content marketing and lead generation\n- Email list building and nurturing\n- Community engagement and loyalty\n\n**Performance Measurement**:\n- ROI tracking and optimization\n- Customer lifetime value analysis\n- Conversion rate optimization`
+                    ];
+                    return strategies[randomFactor % strategies.length];
+                }
+                
+                if (lowerMessage.includes('technical') || lowerMessage.includes('development') || lowerMessage.includes('code')) {
+                    const techStrategies = [
+                        `Lean technical approach for "${message}":\n\n**MVP Development**:\n- Core features first with rapid iteration\n- User feedback integration and testing\n- Iterative improvements and optimization\n\n**Cost Optimization**:\n- Cloud cost management and optimization\n- Open-source solutions and alternatives\n- Efficient resource usage and scaling\n\n**Quality Focus**:\n- Automated testing and quality assurance\n- Code quality metrics and standards\n- Security best practices and compliance`,
+                        
+                        `Efficient development for "${message}":\n\n**MVP Strategy**:\n- Core features with rapid development\n- User feedback and iterative improvement\n- Continuous optimization and refinement\n\n**Cost Management**:\n- Cloud cost optimization and efficiency\n- Open-source solutions and alternatives\n- Resource optimization and scaling\n\n**Quality Excellence**:\n- Automated testing and quality assurance\n- Code quality and performance metrics\n- Security best practices and compliance`,
+                        
+                        `Lean engineering for "${message}":\n\n**MVP Development**:\n- Core features with rapid iteration\n- User feedback and continuous improvement\n- Iterative optimization and refinement\n\n**Cost Optimization**:\n- Cloud cost management and efficiency\n- Open-source solutions and alternatives\n- Resource optimization and scaling\n\n**Quality Focus**:\n- Automated testing and quality assurance\n- Code quality and performance metrics\n- Security best practices and compliance`
+                    ];
+                    return techStrategies[randomFactor % techStrategies.length];
+                }
+                
+                if (lowerMessage.includes('creative') || lowerMessage.includes('design') || lowerMessage.includes('content')) {
+                    const creativeStrategies = [
+                        `Efficient creative strategy for "${message}":\n\n**Quick Wins**:\n- Social media content optimization\n- Local design and branding presence\n- Referral and partnership content\n\n**Sustainable Growth**:\n- Content marketing and brand building\n- Email content and nurturing\n- Community engagement and loyalty\n\n**Performance Measurement**:\n- Content ROI tracking and optimization\n- Brand engagement and loyalty metrics\n- Conversion optimization and testing`,
+                        
+                        `Lean creative approach for "${message}":\n\n**Immediate Impact**:\n- Social media content and engagement\n- Local design and branding presence\n- Referral and partnership content\n\n**Long-term Strategy**:\n- Content marketing and brand building\n- Email content and nurturing\n- Community engagement and loyalty\n\n**Performance Tracking**:\n- Content ROI and engagement metrics\n- Brand loyalty and conversion optimization\n- Continuous improvement and testing`,
+                        
+                        `Efficient creative for "${message}":\n\n**Quick Results**:\n- Social media content optimization\n- Local design and branding presence\n- Referral and partnership content\n\n**Sustainable Growth**:\n- Content marketing and brand building\n- Email content and nurturing\n- Community engagement and loyalty\n\n**Performance Measurement**:\n- Content ROI and engagement tracking\n- Brand loyalty and conversion optimization\n- Continuous improvement and testing`
+                    ];
+                    return creativeStrategies[randomFactor % creativeStrategies.length];
+                }
+                
+                // Generic efficient response
+                const genericResponses = [
+                    `Efficient approach for "${message}":\n\n**Quick Wins**:\n- Immediate impact strategies and tactics\n- Low-cost, high-impact initiatives\n- Rapid implementation and testing\n\n**Sustainable Growth**:\n- Long-term strategy development\n- Resource optimization and efficiency\n- Continuous improvement and innovation\n\n**Performance Measurement**:\n- ROI tracking and optimization\n- Performance metrics and analytics\n- Continuous improvement and testing`,
+                    
+                    `Lean strategy for "${message}":\n\n**Immediate Impact**:\n- Quick wins and rapid implementation\n- Low-cost, high-impact initiatives\n- Fast testing and optimization\n\n**Long-term Strategy**:\n- Sustainable growth and development\n- Resource optimization and efficiency\n- Continuous improvement and innovation\n\n**Performance Tracking**:\n- ROI measurement and optimization\n- Performance metrics and analytics\n- Continuous improvement and testing`,
+                    
+                    `Efficient strategy for "${message}":\n\n**Quick Results**:\n- Immediate impact and rapid implementation\n- Low-cost, high-impact initiatives\n- Fast testing and optimization\n\n**Sustainable Growth**:\n- Long-term strategy and development\n- Resource optimization and efficiency\n- Continuous improvement and innovation\n\n**Performance Measurement**:\n- ROI tracking and optimization\n- Performance metrics and analytics\n- Continuous improvement and testing`
+                ];
+                
+                return genericResponses[randomFactor % genericResponses.length];
             }
 
             async facilitateCollaboration(responses, originalMessage) {
